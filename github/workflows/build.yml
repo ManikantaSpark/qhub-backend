@@ -1,0 +1,217 @@
+name: SonarQube Analysis and Results Storage
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  sonarqube:
+    name: SonarQube Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Important for SonarQube analysis
+      
+      # Setup environment based on your project type
+      # Uncomment the section that matches your project:
+      
+      # For Node.js projects:
+      # - name: Setup Node.js
+      #   uses: actions/setup-node@v3
+      #   with:
+      #     node-version: '18'
+      # - name: Install dependencies
+      #   run: npm install
+      # - name: Run tests with coverage
+      #   run: npm test -- --coverage
+      
+      # For Python projects:
+      # - name: Setup Python
+      #   uses: actions/setup-python@v4
+      #   with:
+      #     python-version: '3.9'
+      # - name: Install dependencies
+      #   run: |
+      #     pip install -r requirements.txt
+      #     pip install pytest pytest-cov
+      # - name: Run tests with coverage
+      #   run: pytest --cov=. --cov-report=xml
+      
+      # For Java Maven projects:
+      # - name: Setup JDK
+      #   uses: actions/setup-java@v3
+      #   with:
+      #     java-version: '17'
+      #     distribution: 'temurin'
+      # - name: Cache Maven dependencies
+      #   uses: actions/cache@v3
+      #   with:
+      #     path: ~/.m2
+      #     key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+      #     restore-keys: ${{ runner.os }}-m2
+      # - name: Build and test
+      #   run: mvn clean verify
+      
+      # SonarQube Analysis
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      
+      # Quality Gate Check
+      - name: SonarQube Quality Gate
+        uses: sonarsource/sonarqube-quality-gate-action@master
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        continue-on-error: true  # Don't fail if quality gate fails
+      
+      # Create comprehensive results directory
+      - name: Prepare Analysis Results
+        if: always()
+        run: |
+          # Create results directory
+          mkdir -p sonarqube-results
+          
+          # Copy scanner work directory if it exists
+          if [ -d ".scannerwork" ]; then
+            cp -r .scannerwork/* sonarqube-results/ 2>/dev/null || true
+          fi
+          
+          # Copy sonar project properties
+          if [ -f "sonar-project.properties" ]; then
+            cp sonar-project.properties sonarqube-results/
+          fi
+          
+          # Create analysis summary
+          cat > sonarqube-results/analysis-summary.txt << EOF
+          ============================================
+          SonarQube Analysis Summary
+          ============================================
+          Project: cosmosdb-sonarqube
+          Date: $(date)
+          Commit: ${{ github.sha }}
+          Branch: ${{ github.ref_name }}
+          Build Number: ${{ github.run_number }}
+          Actor: ${{ github.actor }}
+          Repository: ${{ github.repository }}
+          
+          SonarQube Dashboard: ${{ secrets.SONAR_HOST_URL }}/dashboard?id=cosmosdb-sonarqube
+          
+          Analysis Files:
+          $(ls -la sonarqube-results/ 2>/dev/null || echo "No analysis files found")
+          ============================================
+          EOF
+          
+          # Create download instructions
+          cat > sonarqube-results/HOW-TO-ACCESS.md << EOF
+          # How to Access SonarQube Results
+          
+          ## Option 1: View Online
+          - **SonarQube Dashboard**: ${{ secrets.SONAR_HOST_URL }}/dashboard?id=cosmosdb-sonarqube
+          - **GitHub Actions**: [View this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          
+          ## Option 2: Download Locally
+          ### Via GitHub Web Interface:
+          1. Go to [Actions tab](https://github.com/${{ github.repository }}/actions)
+          2. Click on this workflow run
+          3. Scroll down to "Artifacts" section
+          4. Download "sonarqube-analysis-results-${{ github.run_number }}"
+          
+          ### Via GitHub CLI:
+          \`\`\`bash
+          # Install GitHub CLI: https://cli.github.com/
+          gh auth login
+          gh run download ${{ github.run_id }} --name sonarqube-analysis-results-${{ github.run_number }}
+          \`\`\`
+          
+          ### Via Git (if auto-commit is enabled):
+          \`\`\`bash
+          git pull origin ${{ github.ref_name }}
+          # Results will be in: sonarqube-results/
+          \`\`\`
+          
+          ## Files in this package:
+          - analysis-summary.txt: Summary of analysis
+          - report-task.txt: SonarQube task details
+          - sonar-project.properties: Project configuration
+          - Various scanner work files
+          EOF
+      
+      # Store results as GitHub Artifacts (Download manually)
+      - name: Upload Analysis Results as Artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sonarqube-analysis-results-${{ github.run_number }}
+          path: sonarqube-results/
+          retention-days: 30
+          compression-level: 6
+      
+      # Optional: Commit results back to repository (uncomment if you want automatic local access)
+      # - name: Commit Results to Repository
+      #   if: always() && github.event_name == 'push'  # Only on push, not PR
+      #   run: |
+      #     # Configure git
+      #     git config --local user.email "action@github.com"
+      #     git config --local user.name "GitHub Action"
+      #     
+      #     # Create/update results directory
+      #     mkdir -p analysis-history
+      #     cp -r sonarqube-results analysis-history/latest-analysis
+      #     cp -r sonarqube-results analysis-history/analysis-${{ github.run_number }}
+      #     
+      #     # Add and commit
+      #     git add analysis-history/
+      #     git commit -m "Add SonarQube analysis results - Build #${{ github.run_number }}" || exit 0
+      #     git push
+      
+      # Generate GitHub Step Summary
+      - name: Generate Analysis Summary
+        if: always()
+        run: |
+          echo "## 📊 SonarQube Analysis Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Analysis Details:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Project:** cosmosdb-sonarqube" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build:** #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Date:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Quick Links:" >> $GITHUB_STEP_SUMMARY
+          echo "- [📊 SonarQube Dashboard](${{ secrets.SONAR_HOST_URL }}/dashboard?id=cosmosdb-sonarqube)" >> $GITHUB_STEP_SUMMARY
+          echo "- [📁 Download Results](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [🔄 Workflow Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📂 Available Artifacts:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`sonarqube-analysis-results-${{ github.run_number }}\` (30 day retention)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 💡 How to Access Results Locally:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "# Option 1: GitHub CLI" >> $GITHUB_STEP_SUMMARY
+          echo "gh run download ${{ github.run_id }} --name sonarqube-analysis-results-${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# Option 2: Manual download from Actions tab" >> $GITHUB_STEP_SUMMARY
+          echo "# Go to Actions → This run → Artifacts section" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+      
+      # Send notification (optional)
+      - name: Results Notification
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✅ SonarQube analysis completed successfully!"
+            echo "📊 Results available at: ${{ secrets.SONAR_HOST_URL }}/dashboard?id=cosmosdb-sonarqube"
+            echo "📁 Artifacts available for download in Actions tab"
+          else
+            echo "❌ SonarQube analysis had issues"
+            echo "📋 Check the logs and Quality Gate status"
+          fi
