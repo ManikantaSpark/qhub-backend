@@ -1,0 +1,1 @@
+// Entire file removed: InMemoryGreetRepository is not needed for metrics-only project

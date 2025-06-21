@@ -1,0 +1,1 @@
+// Entire file removed: GreetUseCase is not needed for metrics-only project

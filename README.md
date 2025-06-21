@@ -1,3 +1,30 @@
+<<<<<<< HEAD
+# Hexagonal Spring Boot Demo
+
+This project demonstrates a simple Spring Boot application using hexagonal (ports and adapters) architecture.
+
+## Structure
+- **domain**: Business logic and domain models
+- **application**: Application services and use cases
+- **adapters**: Inbound (REST controllers) and outbound (repositories, external APIs)
+- **ports**: Interfaces for inbound/outbound communication
+
+## How to Run
+
+1. Build the project:
+   ```powershell
+   ./mvnw clean install
+   ```
+2. Run the application:
+   ```powershell
+   ./mvnw spring-boot:run
+   ```
+
+The app will start on http://localhost:8080
+
+## Example Endpoint
+- `GET /greet?name=World` → `{ "message": "Hello, World!" }`
+=======
 # Sonarcloud_test
 
 
@@ -91,3 +118,4 @@ For open source projects, say how it is licensed.
 
 ## Project status
 If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+>>>>>>> origin/main
